@@ -79,15 +79,25 @@ class MainActivity : ComponentActivity() {
 
     private val runtimePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        if (fineLocationGranted) {
+        val cameraGranted = permissions[Manifest.permission.CAMERA] ?: false
+        
+        if (fineLocationGranted && cameraGranted) {
             checkLocationEnabled()
         } else {
-            android.app.AlertDialog.Builder(this)
+            val builder = android.app.AlertDialog.Builder(this)
                 .setTitle("Izin Wajib")
-                .setMessage("Aplikasi ini membutuhkan izin Lokasi untuk absensi.")
+                .setMessage("Aplikasi ini membutuhkan izin Lokasi dan Kamera untuk absensi. Silakan izinkan di Pengaturan Aplikasi.")
                 .setCancelable(false)
-                .setPositiveButton("Keluar") { _, _ -> finish() }
-                .show()
+                .setPositiveButton("Buka Pengaturan") { _, _ ->
+                    val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    val uri = Uri.fromParts("package", packageName, null)
+                    intent.data = uri
+                    startActivity(intent)
+                }
+                .setNegativeButton("Keluar") { _, _ -> finish() }
+            
+            if (locationDialog?.isShowing == true) locationDialog?.dismiss()
+            locationDialog = builder.show()
         }
     }
 
@@ -106,17 +116,35 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        val permissionsToRequest = mutableListOf<String>()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            runtimePermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+            permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissionsToRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            permissionsToRequest.add(Manifest.permission.CAMERA)
+        }
+
+        if (permissionsToRequest.isNotEmpty()) {
+            runtimePermissionLauncher.launch(permissionsToRequest.toTypedArray())
         } else {
             checkLocationEnabled()
         }
     }
 
+    private var locationDialog: android.app.AlertDialog? = null
+
     private fun checkLocationEnabled() {
         val locationManager = getSystemService(android.content.Context.LOCATION_SERVICE) as android.location.LocationManager
-        if (!locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) && !locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)) {
-            android.app.AlertDialog.Builder(this)
+        val isLocationEnabled = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            locationManager.isLocationEnabled
+        } else {
+            locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) || locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+        }
+
+        if (!isLocationEnabled) {
+            if (locationDialog?.isShowing == true) return
+            locationDialog = android.app.AlertDialog.Builder(this)
                 .setTitle("Aktifkan GPS")
                 .setMessage("GPS perangkat Anda mati. Harap aktifkan GPS agar dapat menggunakan aplikasi ini dengan benar.")
                 .setCancelable(false)
@@ -127,6 +155,9 @@ class MainActivity : ComponentActivity() {
                     finish()
                 }
                 .show()
+        } else {
+            locationDialog?.dismiss()
+            locationDialog = null
         }
     }
 
@@ -284,6 +315,10 @@ fun WebViewScreen(
                     }
     
                     webChromeClient = object : WebChromeClient() {
+                        override fun onPermissionRequest(request: android.webkit.PermissionRequest?) {
+                            request?.grant(request.resources)
+                        }
+
                         // 2. GEOLOKASI WAJIB AKTIF
                         override fun onGeolocationPermissionsShowPrompt(
                             origin: String,
