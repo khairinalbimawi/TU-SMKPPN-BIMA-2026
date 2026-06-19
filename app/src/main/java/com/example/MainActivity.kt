@@ -77,6 +77,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val runtimePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        if (fineLocationGranted) {
+            checkLocationEnabled()
+        } else {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Izin Wajib")
+                .setMessage("Aplikasi ini membutuhkan izin Lokasi untuk absensi.")
+                .setCancelable(false)
+                .setPositiveButton("Keluar") { _, _ -> finish() }
+                .show()
+        }
+    }
+
     private val locationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
@@ -88,6 +102,32 @@ class MainActivity : ComponentActivity() {
         }
         geolocationOrigin = null
         geolocationCallback = null
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            runtimePermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        } else {
+            checkLocationEnabled()
+        }
+    }
+
+    private fun checkLocationEnabled() {
+        val locationManager = getSystemService(android.content.Context.LOCATION_SERVICE) as android.location.LocationManager
+        if (!locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) && !locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Aktifkan GPS")
+                .setMessage("GPS perangkat Anda mati. Harap aktifkan GPS agar dapat menggunakan aplikasi ini dengan benar.")
+                .setCancelable(false)
+                .setPositiveButton("Aktifkan") { _, _ ->
+                    startActivity(Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                }
+                .setNegativeButton("Keluar") { _, _ ->
+                    finish()
+                }
+                .show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
