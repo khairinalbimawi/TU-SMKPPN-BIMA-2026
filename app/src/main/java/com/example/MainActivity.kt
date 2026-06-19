@@ -12,6 +12,7 @@ import android.provider.MediaStore
 import android.webkit.GeolocationPermissions
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -20,16 +21,23 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -171,6 +179,7 @@ fun WebViewScreen(
 ) {
     val webViewWrapper = remember { mutableStateOf<WebView?>(null) }
     val showExitDialog = remember { mutableStateOf(false) }
+    val isOffline = remember { mutableStateOf(false) }
     val context = LocalContext.current
     val activity = context as? Activity
 
@@ -204,53 +213,126 @@ fun WebViewScreen(
         )
     }
 
-    AndroidView(
-        modifier = Modifier.fillMaxSize().imePadding(),
-        factory = { ctx ->
-            WebView(ctx).apply {
-                webViewWrapper.value = this
-                
-                settings.apply {
-                    // 4. OPTIMASI WEBVIEW MODERN
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    databaseEnabled = true
-                    setGeolocationEnabled(true)
-                    cacheMode = WebSettings.LOAD_DEFAULT
-                }
-
-                webViewClient = object : WebViewClient() {
-                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                        // Jangan lempar ke browser eksternal
-                        return false 
+    Box(modifier = Modifier.fillMaxSize().imePadding()) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { ctx ->
+                WebView(ctx).apply {
+                    webViewWrapper.value = this
+                    
+                    settings.apply {
+                        // 4. OPTIMASI WEBVIEW MODERN
+                        javaScriptEnabled = true
+                        domStorageEnabled = true
+                        databaseEnabled = true
+                        setGeolocationEnabled(true)
+                        cacheMode = WebSettings.LOAD_DEFAULT
                     }
-                }
-
-                webChromeClient = object : WebChromeClient() {
-                    // 2. GEOLOKASI WAJIB AKTIF
-                    override fun onGeolocationPermissionsShowPrompt(
-                        origin: String,
-                        callback: GeolocationPermissions.Callback
-                    ) {
-                        onGeolocationPermissionsShowPrompt(origin, callback)
-                    }
-
-                    // 3. KAMERA LANGSUNG
-                    override fun onShowFileChooser(
-                        view: WebView?,
-                        filePathCallback: ValueCallback<Array<Uri>>?,
-                        fileChooserParams: FileChooserParams?
-                    ): Boolean {
-                        if (filePathCallback != null) {
-                            onShowFileChooser(filePathCallback)
+    
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                            // Jangan lempar ke browser eksternal
+                            return false 
                         }
-                        return true
+                        
+                        override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                            super.onReceivedError(view, request, error)
+                            if (request?.isForMainFrame == true) {
+                                isOffline.value = true
+                            }
+                        }
                     }
+    
+                    webChromeClient = object : WebChromeClient() {
+                        // 2. GEOLOKASI WAJIB AKTIF
+                        override fun onGeolocationPermissionsShowPrompt(
+                            origin: String,
+                            callback: GeolocationPermissions.Callback
+                        ) {
+                            onGeolocationPermissionsShowPrompt(origin, callback)
+                        }
+    
+                        // 3. KAMERA LANGSUNG
+                        override fun onShowFileChooser(
+                            view: WebView?,
+                            filePathCallback: ValueCallback<Array<Uri>>?,
+                            fileChooserParams: FileChooserParams?
+                        ): Boolean {
+                            if (filePathCallback != null) {
+                                onShowFileChooser(filePathCallback)
+                            }
+                            return true
+                        }
+                    }
+    
+                    loadUrl(url)
                 }
+            },
+            update = {}
+        )
 
-                loadUrl(url)
-            }
-        },
-        update = {}
+        if (isOffline.value) {
+            OfflineScreen(
+                onRetry = {
+                    isOffline.value = false
+                    webViewWrapper.value?.reload()
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun OfflineScreen(onRetry: () -> Unit) {
+    val infiniteTransition = rememberInfiniteTransition()
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        )
     )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Warning,
+            contentDescription = "Offline",
+            modifier = Modifier
+                .size(120.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = "Koneksi Terputus",
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text(
+            text = "Tidak dapat terhubung ke server. Silakan periksa koneksi internet Anda dan coba lagi.",
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+        )
+        Spacer(modifier = Modifier.height(48.dp))
+        Button(
+            onClick = onRetry,
+            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp)
+        ) {
+            Text("Coba Lagi", fontSize = MaterialTheme.typography.titleMedium.fontSize)
+        }
+    }
 }
