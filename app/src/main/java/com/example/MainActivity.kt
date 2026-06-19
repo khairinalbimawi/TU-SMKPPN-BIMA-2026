@@ -339,7 +339,30 @@ fun WebViewScreen(
                             return true
                         }
                     }
-    
+
+                    setDownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
+                        try {
+                            val request = android.app.DownloadManager.Request(Uri.parse(url))
+                            request.setMimeType(mimetype)
+                            val cookies = android.webkit.CookieManager.getInstance().getCookie(url)
+                            request.addRequestHeader("cookie", cookies)
+                            request.addRequestHeader("User-Agent", userAgent)
+                            request.setDescription("Downloading file...")
+                            request.setTitle(android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype))
+                            request.allowScanningByMediaScanner()
+                            request.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                            request.setDestinationInExternalPublicDir(
+                                android.os.Environment.DIRECTORY_DOWNLOADS,
+                                android.webkit.URLUtil.guessFileName(url, contentDisposition, mimetype)
+                            )
+                            val dm = ctx.getSystemService(android.content.Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+                            dm.enqueue(request)
+                            android.widget.Toast.makeText(ctx, "Downloading File", android.widget.Toast.LENGTH_LONG).show()
+                        } catch (e: Exception) {
+                            android.widget.Toast.makeText(ctx, "Failed to download", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+
                     loadUrl(url)
                 }
             },
