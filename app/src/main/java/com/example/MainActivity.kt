@@ -60,6 +60,15 @@ class MainActivity : ComponentActivity() {
         filePathCallback = null
     }
 
+    private val cameraPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (isGranted) {
+            dispatchTakePictureIntent()
+        } else {
+            filePathCallback?.onReceiveValue(null)
+            filePathCallback = null
+        }
+    }
+
     private val locationPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
@@ -88,7 +97,11 @@ class MainActivity : ComponentActivity() {
                 url = "https://sipegawaismkpp.web.app/",
                 onShowFileChooser = { callback ->
                     filePathCallback = callback
-                    dispatchTakePictureIntent()
+                    if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                        dispatchTakePictureIntent()
+                    } else {
+                        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                    }
                 },
                 onGeolocationPermissionsShowPrompt = { origin, callback ->
                     geolocationOrigin = origin
@@ -124,6 +137,7 @@ class MainActivity : ComponentActivity() {
                     photoFile
                 )
                 takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoURI)
+                takePictureIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                 takePictureLauncher.launch(takePictureIntent)
             } else {
                 filePathCallback?.onReceiveValue(null)
