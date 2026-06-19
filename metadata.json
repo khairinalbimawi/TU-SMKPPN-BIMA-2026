@@ -1,0 +1,6 @@
+{
+  "name": "TU SMKPPN BIMA",
+  "description": "Aplikasi WebView untuk TU SMKPPN BIMA dengan fitur immersive mode, geolocation, dan kamera langsung.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
